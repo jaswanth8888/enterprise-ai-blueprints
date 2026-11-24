@@ -1,0 +1,110 @@
+###############################################################################
+# Default values for the space-coding-agent Helm chart
+#
+# This chart deploys NO models and NO sandboxes. The agent talks to LiteLLM for
+# the model and to SPACE (Firecracker microVMs) through its E2B-compatible API.
+# deploy.sh discovers every platform value below; set them by hand only for a
+# manual helm install.
+###############################################################################
+
+agent:
+  image:
+    repository: space-coding-agent
+    tag: ""             # empty = chart appVersion; deploy.sh sets the tag it built
+    pullPolicy: IfNotPresent
+
+  # Keep at 1: chat sessions, their event buffers and the live sandbox handles
+  # are in memory. The Deployment uses Recreate so two pods never overlap (the
+  # new pod's startup sweep kills sandboxes the old pod left behind).
+  replicaCount: 1
+
+  # --- LLM (LiteLLM, OpenAI API) ---------------------------------------------
+  openaiBaseUrl: "http://litellm.litellm.svc.cluster.local:4000/v1"
+  openaiApiKey: ""      # REQUIRED
+  # A tool-calling model registered in LiteLLM (this blueprint uses qwen3-coder-30b)
+  modelName: ""         # REQUIRED
+
+  # Shared token for the UI (sign-in page) and API clients (Bearer). REQUIRED:
+  # the route opts out of the gateway's LiteLLM auth, so this is the only gate.
+  appAuthToken: ""
+
+  port: 8090
+  logLevel: INFO
+
+  # Langfuse tracing (optional): MAF spans through OpenTelemetry
+  langfusePublicKey: ""
+  langfuseSecretKey: ""
+  langfuseHost: ""      # e.g. http://langfuse-web.langfuse.svc.cluster.local:3000
+  langfuseEnableSensitiveData: "true"
+
+  # Limits (clamped by the app)
+  limits:
+    maxSessions: 10             # concurrent chats; the idlest one is evicted
+    sessionMaxIdleS: 3600       # a chat with no activity for this long is closed
+    sessionSandboxTtlS: 900     # SPACE timeout of a session sandbox, renewed on use
+    sessionSandboxIdleS: 600    # an unused session sandbox is killed after this
+    fanoutConcurrency: 8        # microVMs one parallel call creates at once
+    fanoutMaxTasks: 16          # tasks per parallel call
+    fanoutGlobalMax: 16         # parallel microVMs across all chats
+    createTimeoutS: 120
+    execTimeoutS: 120
+    execTimeoutMaxS: 600
+    runTimeoutS: 900            # one user request, all tool calls included
+    maxToolCallsPerRun: 30
+
+  # Cluster-internal traffic must bypass the corporate proxy. The SPACE E2B
+  # domain is appended by the chart (the SDK dials the gateway directly).
+  noProxy: "localhost,127.0.0.1,.svc,.svc.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+  nodeSelector: {}
+
+# --- SPACE (Perplexity SPACE, E2B-compatible API) ----------------------------
+space:
+  # Secret space/space-api-key keys E2B_API_KEY and E2B_DOMAIN (installed with space_enabled).
+  e2bApiKey: ""         # REQUIRED
+  e2bDomain: ""         # REQUIRED, e.g. e2b.solutions.ai
+  # SPACE routes E2B traffic by Host header only, so the app dials the gateway's
+  # in-cluster Service with the real hostnames: e2b.<base> and *.e2b.<base>
+  # resolve to this address inside the app. Empty = normal DNS.
+  gatewayAddr: ""       # e.g. envoy-envoy-gateway-system-eg-gateway-xxxx.envoy-gateway-system.svc.cluster.local
+  # Stack CA (Secret cert-manager/ai-solutions-ca key ca.crt), base64 PEM. Trusted
+  # in addition to the public roots. Empty = public roots only.
+  caCertB64: ""
+  template: seed
+  clientId: space-coding-agent
+  # Sandbox egress (public internet only; SPACE blocks private ranges)
+  sandboxInternet: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  nodePort: ""
+
+# ---------------------------------------------------------------------------
+# HTTPRoute (Envoy Gateway / Gateway API). TLS is terminated at the shared
+# gateway with the wildcard *.<base_domain_name> certificate.
+# ---------------------------------------------------------------------------
+httpRoute:
+  enabled: false
+  host: ""              # e.g. space-coding-agent.solutions.ai
+  # The UI keeps one SSE stream open per chat: raise the per-request timeout.
+  timeout: "3600s"
+  gateway:
+    name: eg-gateway
+    namespace: envoy-gateway-system
+    sectionName: https
+  # Browsers can't send a LiteLLM key, so the route opts out of 'gateway-auth';
+  # the app's own gate is agent.appAuthToken.
+  bypassGatewayAuth: true

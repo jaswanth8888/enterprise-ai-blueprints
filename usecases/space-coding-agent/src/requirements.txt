@@ -1,0 +1,18 @@
+# Microsoft Agent Framework (agent, tool calling, sessions)
+agent-framework-core==1.19.0
+agent-framework-openai==1.14.4
+openai==3.16.2
+
+# SPACE microVMs through their E2B-compatible API
+e2b==2.21.1
+httpx==0.28.1
+# Imported directly: the CA bundle is the public roots plus the stack CA
+certifi==2026.11.20
+
+# Web app. Plain uvicorn, not uvicorn[standard]: uvloop resolves names in libuv
+# and would bypass the gateway resolver in app/net.py.
+fastapi==0.165.0
+uvicorn==0.54.0
+
+# Observability (used only when Langfuse keys are set)
+langfuse==4.15.4

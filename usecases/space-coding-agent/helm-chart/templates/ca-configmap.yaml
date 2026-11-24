@@ -1,0 +1,13 @@
+{{- if .Values.space.caCertB64 }}
+# The stack CA's public certificate (never its key), so the app trusts the
+# gateway's certificate for the SPACE E2B hostnames.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "space-coding-agent.fullname" . }}-space-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "space-coding-agent.labels" . | nindent 4 }}
+binaryData:
+  ca.crt: {{ .Values.space.caCertB64 | quote }}
+{{- end }}

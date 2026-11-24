@@ -1,0 +1,63 @@
+# SPACE Coding Agent — local development
+# Runs the agent outside Kubernetes against a Toolkit Manager stack: LiteLLM and
+# SPACE's E2B API are both reached through the stack's gateway.
+#
+# SPACE routes E2B traffic by Host header, so the app resolves e2b.<base>,
+# *.e2b.<base> and the LiteLLM host to the gateway IP itself (SPACE_GATEWAY_ADDR)
+# and trusts the stack CA (env/<env>/logs/ai-solutions-ca.crt).
+#
+# Usage:
+#   export GATEWAY_IP=10.0.0.10                    # kubectl get svc -n envoy-gateway-system
+#   export BASE_DOMAIN=solutions.ai                # base_domain_name
+#   export LITELLM_API_KEY=sk-your-key             # Secret litellm/litellm-master-key, or a virtual key
+#   export E2B_API_KEY=e2b_...                     # Secret space/space-api-key, key E2B_API_KEY
+#   export STACK_CA=/path/to/ai-solutions-ca.crt
+#   export APP_AUTH_TOKEN=$(openssl rand -hex 24)
+#   docker compose up --build                      # then open http://localhost:8090
+
+services:
+
+  space-coding-agent:
+    image: space-coding-agent:dev      # built locally below
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+      args:
+        http_proxy: "${http_proxy:-}"
+        https_proxy: "${https_proxy:-}"
+        no_proxy: "${no_proxy:-}"
+        HTTP_PROXY: "${HTTP_PROXY:-${http_proxy:-}}"
+        HTTPS_PROXY: "${HTTPS_PROXY:-${https_proxy:-}}"
+        NO_PROXY: "${NO_PROXY:-${no_proxy:-}}"
+    container_name: space-coding-agent
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "8090:8090"
+    environment:
+      OPENAI_BASE_URL: "https://litellm.${BASE_DOMAIN:-solutions.ai}/v1"
+      OPENAI_API_KEY: "${LITELLM_API_KEY:?set LITELLM_API_KEY}"
+      MODEL_NAME: "${MODEL_NAME:-qwen3-coder-30b}"
+      E2B_API_KEY: "${E2B_API_KEY:?set E2B_API_KEY}"
+      E2B_DOMAIN: "e2b.${BASE_DOMAIN:-solutions.ai}"
+      SPACE_GATEWAY_ADDR: "${GATEWAY_IP:?set GATEWAY_IP}"
+      GATEWAY_RESOLVE_HOSTS: "litellm.${BASE_DOMAIN:-solutions.ai}"
+      SPACE_CA_FILE: "/etc/space-ca/ca.crt"
+      SPACE_INSTANCE: "compose-${USER:-dev}"
+      APP_AUTH_TOKEN: "${APP_AUTH_TOKEN:?set APP_AUTH_TOKEN}"
+      FANOUT_CONCURRENCY: "${FANOUT_CONCURRENCY:-8}"
+      # Everything goes to the gateway directly, never through a proxy.
+      NO_PROXY: "*"
+      no_proxy: "*"
+    volumes:
+      - "${STACK_CA:?set STACK_CA}:/etc/space-ca/ca.crt:ro"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3

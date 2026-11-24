@@ -13,6 +13,8 @@
 #   LiteLLM   litellm.litellm.svc:4000         Secret litellm/litellm-master-key   (master_key)
 #   Langfuse  langfuse-web.langfuse.svc:3000   Secret langfuse/langfuse-secrets    (public_key, secret_key)
 #   Gateway   eg-gateway (envoy-gateway-system), listener https = *.<base_domain_name>
+#   SPACE     E2B API api.e2b.<base> on the gateway  Secret space/space-api-key   (E2B_API_KEY, E2B_DOMAIN)
+#   Stack CA  Secret cert-manager/ai-solutions-ca  (ca.crt; the key is never read)
 #   Mesh      Istio ambient + STRICT mTLS; LiteLLM AuthorizationPolicy litellm/litellm-ingress
 # =============================================================================
 
@@ -116,6 +118,48 @@ tm_check_litellm_access() {
   warn "  1. add '- ${ns}' to litellm_allowed_namespaces in env/<env>/config.agent-toolkit.yaml"
   warn "  2. ./es_auto_installer.sh install agent-toolkit"
   warn "Or re-run with PATCH_LITELLM_AUTHZ=true to patch the policy directly (temporary)."
+}
+
+# E2B_API_KEY, E2B_DOMAIN <- SPACE's E2B-compatible API (space_enabled + space_e2b_enabled).
+tm_discover_space_e2b() {
+  if [[ -z "${E2B_API_KEY:-}" ]]; then
+    E2B_API_KEY="$(tm_secret_value space space-api-key E2B_API_KEY)"
+    [[ -n "${E2B_API_KEY}" ]] && success "Auto-discovered the SPACE E2B API key (space/space-api-key)."
+  fi
+  [[ -n "${E2B_DOMAIN:-}" ]] || E2B_DOMAIN="$(tm_secret_value space space-api-key E2B_DOMAIN)"
+  return 0
+}
+
+# TM_GATEWAY_SVC <- in-cluster DNS name of the eg-gateway Service (its name is hashed).
+tm_discover_gateway_service() {
+  [[ -z "${TM_GATEWAY_SVC:-}" ]] || return 0
+  local svc
+  svc="$(kubectl get svc -n "${TM_GATEWAY_NAMESPACE}" \
+    -l "gateway.envoyproxy.io/owning-gateway-name=${TM_GATEWAY_NAME}" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  [[ -n "${svc}" ]] && TM_GATEWAY_SVC="${svc}.${TM_GATEWAY_NAMESPACE}.svc.cluster.local"
+  return 0
+}
+
+# STACK_CA_B64 <- the stack CA certificate (base64 PEM), so pods trust gateway certificates.
+tm_discover_stack_ca() {
+  [[ -z "${STACK_CA_B64:-}" ]] || return 0
+  local b64
+  b64="$(kubectl get secret -n cert-manager ai-solutions-ca -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)"
+  if [[ -n "${b64}" ]] && base64 -d <<<"${b64}" 2>/dev/null | grep -q 'BEGIN CERTIFICATE'; then
+    STACK_CA_B64="${b64}"
+    success "Auto-discovered the stack CA certificate (cert-manager/ai-solutions-ca)."
+  fi
+  return 0
+}
+
+# Warn when SPACE's E2B API is not published on the gateway.
+tm_check_space_e2b() {
+  kubectl get httproute space-e2b-api -n space &>/dev/null \
+    || warn "HTTPRoute space/space-e2b-api not found: set space_e2b_enabled: true and reinstall agent-toolkit."
+  kubectl get clienttrafficpolicy space-e2b-listener -n "${TM_GATEWAY_NAMESPACE}" &>/dev/null \
+    || warn "ClientTrafficPolicy space-e2b-listener not found: E2B SDK requests may be rejected."
+  return 0
 }
 
 # Print how to reach a host published on the platform gateway.

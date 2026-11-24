@@ -1,0 +1,18 @@
+{{- if and .Values.httpRoute.enabled .Values.httpRoute.bypassGatewayAuth }}
+{{- $fullname := include "space-coding-agent.fullname" . }}
+# Empty route-level SecurityPolicy: overrides the gateway-wide 'gateway-auth'
+# (LiteLLM key check) for this route only, so browsers can open the UI. The
+# app's own gate is agent.appAuthToken.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ $fullname }}-no-gateway-auth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "space-coding-agent.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ $fullname }}
+{{- end }}

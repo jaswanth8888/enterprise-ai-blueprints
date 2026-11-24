@@ -18,6 +18,7 @@ the same value the deploy scripts call `CLUSTER_URL`.
 | **Langfuse (LLM Traces)** | `http://langfuse-web.langfuse.svc.cluster.local:3000` | `https://langfuse.<base>` |
 | **Redis** | `redis://default:<password>@redis-stack-server.redis.svc.cluster.local:6379` *(auth required)* | *(in-cluster only)* |
 | **Agent Sandbox Router** | `http://sandbox-router-svc.agent-sandbox-system.svc.cluster.local:8080` | *(in-cluster only)* |
+| **SPACE E2B API** (`space_e2b_enabled`) | via the gateway Service with the external Host header (SPACE routes by Host) | `https://api.e2b.<base>` (control), `https://<port>-<sandbox-id>.e2b.<base>` (sandboxes) |
 | **Grafana** | namespace `monitoring` | `https://grafana.<base>` |
 | **OTel Collector** | `opentelemetry-collector.monitoring.svc.cluster.local:4317` (gRPC) / `:4318` (HTTP) | *(in-cluster only)* |
 | **Coding Agent** | `http://coding-agent.coding-agent-maf.svc.cluster.local:8090` | `https://coding-agent.<base>` |
@@ -25,6 +26,7 @@ the same value the deploy scripts call `CLUSTER_URL`.
 | **Coding Agent (LangGraph)** | `http://coding-agent-langgraph.coding-agent.svc.cluster.local:8090` | `https://coding-agent-langgraph.<base>` |
 | **Customer Support Agent** | `http://customer-support-agent.customer-support-agent.svc.cluster.local:8501` (UI) / `:8502` (API) | `https://customer-support-agent.<base>` (`/api`, `/v1` → API; `/` → UI) |
 | **Deep Research Agent** | `http://deep-research-agent.deep-research-agent.svc.cluster.local:8081` (dashboard `:8082`) | `https://deep-research-agent.<base>` (optional `https://deep-research-agent-dashboard.<base>`) |
+| **SPACE Coding Agent** | `http://space-coding-agent.space-coding-agent.svc.cluster.local:8090` | `https://space-coding-agent.<base>` |
 
 Reserved platform hostnames (do not reuse for a blueprint): `inference.<base>`,
 `keycloak.<base>`, `grafana.<base>`.
@@ -393,12 +395,15 @@ the full API.
 | Coding Agent (LangGraph) | `coding-agent` / `coding-agent-langgraph:8090` | `coding-agent-langgraph.<base>` | `Authorization: Bearer <DEVUI_AUTH_TOKEN>` on `/v1/*` | `GET /health`, `GET /v1/entities`, `POST /v1/chat/completions`, `POST /v1/responses` |
 | Customer Support Agent | `customer-support-agent` / `customer-support-agent:8501,8502` | `customer-support-agent.<base>` | **none** (demo data only) | `GET /api/v1/health`, `POST /api/v1/chat`, `GET /api/v1/tools`, `POST /v1/chat/completions`; Streamlit UI at `/` |
 | Deep Research Agent | `deep-research-agent` / `deep-research-agent:8081` (`:8082` dashboard) | `deep-research-agent.<base>`, `deep-research-agent-dashboard.<base>` | optional `X-API-Key` on `/api/*` (`API_KEYS`) | `GET /health`, `POST /api/research`, `GET /api/research/{id}/stream` (SSE), `GET /api/research/{id}` |
+| SPACE Coding Agent | `space-coding-agent` / `space-coding-agent:8090` | `space-coding-agent.<base>` | `Authorization: Bearer <APP_AUTH_TOKEN>`, or the cookie from `POST /api/login` | `GET /health`, `POST /api/sessions`, `POST /api/sessions/{id}/messages`, `GET /api/sessions/{id}/events` (SSE); UI at `/` |
 
-All three routes ship the empty route-level SecurityPolicy
+All four routes ship the empty route-level SecurityPolicy
 (`httpRoute.bypassGatewayAuth: true`), and their namespaces must be listed in
 `litellm_allowed_namespaces`. `customer-support-agent` additionally uses Redis
 and the `bge-base-en` embedding model (add it to `llm_services_autodeploy_models`);
 `deep-research-agent` needs `TAVILY_API_KEY` and internet egress.
+`space-coding-agent` needs SPACE with its E2B API (`space_enabled`, `space_e2b_enabled`):
+the key and domain come from secret `space/space-api-key` (`E2B_API_KEY`, `E2B_DOMAIN`).
 
 ---
 
@@ -463,6 +468,10 @@ SANDBOX_ROUTER_TOKEN=<router-auth-token>   # when ALLOW_UNAUTHENTICATED_ROUTER=f
 SANDBOX_NAMESPACE=agent-sandbox-system
 SANDBOX_WARMPOOL=python-pool
 SANDBOX_TEMPLATE=python-sandbox-template
+
+# SPACE E2B API (space-coding-agent)
+E2B_API_KEY=<from space/space-api-key>
+E2B_DOMAIN=e2b.solutions.ai
 
 # Observability (optional)  (external: https://langfuse.<base>)
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxx

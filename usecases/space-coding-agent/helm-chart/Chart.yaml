@@ -1,0 +1,14 @@
+apiVersion: v2
+name: space-coding-agent
+description: A Microsoft Agent Framework coding agent that runs code in SPACE Firecracker microVMs, with a live 3-pane UI
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - agent
+  - coding-agent
+  - sandbox
+  - space
+  - firecracker
+  - microsoft-agent-framework

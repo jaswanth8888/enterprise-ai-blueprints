@@ -51,8 +51,10 @@ if ! command -v buildkitd &>/dev/null && [[ ! -x /usr/local/bin/buildkitd ]]; th
   success "Installed buildkit to /usr/local/bin."
 fi
 
-# Start buildkitd if not running.
-if pgrep -x buildkitd >/dev/null 2>&1; then
+# Start buildkitd on nerdctl's default socket unless one answers there. Another
+# buildkitd on its own socket (e.g. SPACE's /run/space-buildkit) is not ours to use.
+BUILDKIT_SOCK=/run/buildkit/buildkitd.sock
+if ${SUDO} buildctl --addr "unix://${BUILDKIT_SOCK}" debug workers >/dev/null 2>&1; then
   info "buildkitd already running."
 else
   info "Starting buildkitd..."
@@ -60,8 +62,8 @@ else
               http_proxy="${HP}" https_proxy="${HPS}" no_proxy="${NP}" \
     buildkitd --oci-worker=false --containerd-worker=true --containerd-worker-namespace=k8s.io \
     >/tmp/buildkitd.log 2>&1 &
-  for _ in $(seq 1 15); do ${SUDO} test -S /run/buildkit/buildkitd.sock && break; sleep 1; done
-  ${SUDO} test -S /run/buildkit/buildkitd.sock || die "buildkitd did not start (see /tmp/buildkitd.log)."
+  for _ in $(seq 1 15); do ${SUDO} test -S "${BUILDKIT_SOCK}" && break; sleep 1; done
+  ${SUDO} test -S "${BUILDKIT_SOCK}" || die "buildkitd did not start (see /tmp/buildkitd.log)."
   success "buildkitd is up."
 fi
 

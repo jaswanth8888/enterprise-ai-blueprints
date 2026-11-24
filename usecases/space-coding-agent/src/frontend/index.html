@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!-- Copyright (C) 2025-2026 Intel Corporation -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPACE Coding Agent</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div id="login" class="overlay" hidden>
+    <form id="login-form" class="login-box">
+      <h2>SPACE Coding Agent</h2>
+      <p>Enter the app token printed by <code>deploy.sh</code>.</p>
+      <input id="login-token" type="password" autocomplete="current-password" placeholder="APP_AUTH_TOKEN" required>
+      <button type="submit">Sign in</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">SPACE Coding Agent <span class="sub">Firecracker microVMs via the E2B API</span></div>
+    <div class="status">
+      <span class="dot" id="st-llm" title="LLM (LiteLLM)">LLM</span>
+      <span class="dot" id="st-space" title="SPACE E2B API">SPACE</span>
+      <span class="chip" id="st-live">0 live microVMs</span>
+      <span class="chip" id="st-kernels" title="The pod and each sandbox run different kernels">kernels</span>
+      <span class="chip muted" id="st-model"></span>
+    </div>
+    <div class="actions">
+      <button id="btn-theme" class="ghost" title="Switch between light and dark mode"></button>
+      <button id="btn-cancel" class="ghost" disabled>Cancel</button>
+      <button id="btn-reset" class="ghost">Reset</button>
+      <button id="btn-new">New chat</button>
+    </div>
+  </header>
+
+  <main class="panes">
+    <section class="pane timeline">
+      <h3>Tool calls</h3>
+      <ol id="timeline" class="timeline-list"></ol>
+    </section>
+
+    <section class="pane chat">
+      <div id="messages" class="messages">
+        <div class="welcome">
+          <h2>Code in microVMs, one or many at a time</h2>
+          <p>Each chat gets its own SPACE sandbox; parallel requests start a fresh microVM per task.
+             Watch them on the board as they are created, run and are killed.</p>
+          <div id="examples" class="examples"></div>
+        </div>
+      </div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="3" placeholder="Ask for code to run, or for parallel experiments…"></textarea>
+        <button id="send" type="submit">Send</button>
+      </form>
+    </section>
+
+    <section class="pane board">
+      <h3>Sandbox board <span id="board-count" class="muted"></span></h3>
+      <div id="fanout-banner" class="banner" hidden></div>
+      <div id="cards" class="cards"></div>
+      <details id="history" class="history">
+        <summary>History <span id="history-count"></span></summary>
+        <div id="history-cards" class="cards"></div>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

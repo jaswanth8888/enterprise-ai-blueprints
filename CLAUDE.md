@@ -39,6 +39,7 @@ Current use cases (directory = namespace; host in parentheses):
 - `coding-agent` (`coding-agent-langgraph.<base>`, release `coding-agent-langgraph`): LangGraph, Agent Sandbox code execution, API-only with a Bearer `DEVUI_AUTH_TOKEN`.
 - `customer-support-agent` (`customer-support-agent.<base>`): Streamlit UI at `/`, FastAPI at `/api`+`/v1`, SQLite demo data, RediSearch memory with the `bge-base-en` embedding model. It has **no user auth**.
 - `deep-research-agent` (`deep-research-agent.<base>`, optional `-dashboard` host): LangGraph web research; needs `TAVILY_API_KEY`; SQLite on a PVC; 3600s route timeout for SSE.
+- `space-coding-agent` (`space-coding-agent.<base>`): Microsoft Agent Framework on SPACE Firecracker microVMs via the E2B SDK (session sandbox plus parallel fan-out); custom 3-pane UI over SSE; `APP_AUTH_TOKEN` (Bearer or login cookie); needs `space_enabled` + `space_e2b_enabled`.
 
 `customer-support-agent` and `deep-research-agent` read `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`. Their
 deploy.sh maps the dispatcher's `OPENAI_BASE_URL`/`OPENAI_API_KEY`/`MODEL_NAME` onto those.
@@ -53,6 +54,7 @@ deploy.sh maps the dispatcher's `OPENAI_BASE_URL`/`OPENAI_API_KEY`/`MODEL_NAME` 
 | Agent Sandbox router | `http://sandbox-router-svc.agent-sandbox-system.svc.cluster.local:8080` | Secret `agent-sandbox-system/sandbox-router-auth` key `ROUTER_AUTH_TOKEN` (Bearer) |
 | Sandbox resources | SandboxTemplate `python-sandbox-template`, SandboxWarmPool `python-pool` | CRDs `extensions.agents.x-k8s.io/v1beta1`, `agents.x-k8s.io` |
 | Gateway | Gateway `eg-gateway`, ns `envoy-gateway-system`, listener `https` = `*.<base_domain_name>` | wildcard TLS terminated at the gateway |
+| SPACE E2B API (optional) | `api.e2b.<base>` and `<port>-<id>.e2b.<base>` on the gateway; routed by Host only, so pods dial the gateway Service with those hostnames | Secret `space/space-api-key` keys `E2B_API_KEY`, `E2B_DOMAIN`; stack CA `cert-manager/ai-solutions-ca` `ca.crt` |
 
 Rules every blueprint must follow:
 - **Exposure:** use an `HTTPRoute` (`parentRefs` → `eg-gateway`/`envoy-gateway-system`/`https`, host `<usecase>.<base>`). TLS is terminated at the gateway, so there is no per-app TLS secret.
@@ -65,7 +67,7 @@ Rules every blueprint must follow:
   - Pods: `runAsNonRoot`, UID/GID 10001 (numeric `USER` in the Dockerfile), `fsGroup`, `seccompProfile: RuntimeDefault`.
   - Containers: `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`.
 - **Scheduling:** no hard node affinity. The stack Toolkit Manager installs labels nodes `workload-class=platform|inference`, on multi-node clusters only.
-- **Sandboxes:** sandbox pods have no in-cluster egress (NetworkPolicy `eat-sandbox-pool-egress`). Code running in a sandbox cannot call LiteLLM or Redis.
+- **Sandboxes:** sandbox pods have no in-cluster egress (NetworkPolicy `eat-sandbox-pool-egress`). Code running in a sandbox cannot call LiteLLM or Redis. The same holds for SPACE microVMs (public egress only).
 - **Auth mode:** the agent-toolkit default is `auth_provider: litellm`, so Keycloak is not deployed. Don't add Keycloak dependencies.
 
 ## Common commands

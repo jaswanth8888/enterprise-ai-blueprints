@@ -1,0 +1,113 @@
+{{- $fullname := include "space-coding-agent.fullname" . }}
+{{- $l := .Values.agent.limits }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "space-coding-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.agent.replicaCount }}
+  # Never two pods at once: sessions are in memory, and a new pod's startup sweep
+  # kills the sandboxes tagged with this release's instance id.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "space-coding-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "space-coding-agent.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/ca: {{ .Values.space.caCertB64 | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "space-coding-agent.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      # On shutdown the app kills its live microVMs (up to 15 s).
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.agent.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.agent.port }}
+              protocol: TCP
+          # Numeric settings are set here rather than in the ConfigMap: names such as
+          # *PORT and *TIMEOUT_S trip the scanners' sensitive-key checks.
+          env:
+            - name: PORT
+              value: {{ .Values.agent.port | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.agent.logLevel | quote }}
+            {{- range $name, $value := dict
+                  "MAX_SESSIONS" $l.maxSessions "SESSION_MAX_IDLE_S" $l.sessionMaxIdleS
+                  "SESSION_SANDBOX_TTL_S" $l.sessionSandboxTtlS "SESSION_SANDBOX_IDLE_S" $l.sessionSandboxIdleS
+                  "FANOUT_CONCURRENCY" $l.fanoutConcurrency "FANOUT_MAX_TASKS" $l.fanoutMaxTasks
+                  "FANOUT_GLOBAL_MAX" $l.fanoutGlobalMax "CREATE_TIMEOUT_S" $l.createTimeoutS
+                  "EXEC_TIMEOUT_S" $l.execTimeoutS "EXEC_TIMEOUT_MAX_S" $l.execTimeoutMaxS
+                  "RUN_TIMEOUT_S" $l.runTimeoutS "MAX_TOOL_CALLS_PER_RUN" $l.maxToolCallsPerRun }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-config
+            - secretRef:
+                name: {{ $fullname }}-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            # The combined CA bundle (public roots + stack CA) is written here at startup.
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.space.caCertB64 }}
+            - name: space-ca
+              mountPath: /etc/space-ca
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.space.caCertB64 }}
+        - name: space-ca
+          configMap:
+            name: {{ $fullname }}-space-ca
+        {{- end }}

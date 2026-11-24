@@ -1,0 +1,29 @@
+{{- $domain := required "space.e2bDomain is required (Secret space/space-api-key, key E2B_DOMAIN)" .Values.space.e2bDomain }}
+{{- $noProxy := printf "%s,%s,.%s" .Values.agent.noProxy $domain $domain }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "space-coding-agent.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "space-coding-agent.labels" . | nindent 4 }}
+data:
+  # --- LLM (no models are deployed by this chart) ---
+  OPENAI_BASE_URL: {{ .Values.agent.openaiBaseUrl | quote }}
+  MODEL_NAME: {{ required "agent.modelName is required" .Values.agent.modelName | quote }}
+  # --- SPACE ---
+  E2B_DOMAIN: {{ $domain | quote }}
+  SPACE_GATEWAY_ADDR: {{ .Values.space.gatewayAddr | quote }}
+  SPACE_CA_FILE: "/etc/space-ca/ca.crt"
+  SPACE_TEMPLATE: {{ .Values.space.template | quote }}
+  SPACE_CLIENT_ID: {{ .Values.space.clientId | quote }}
+  # Tags this release's sandboxes, so a restarted pod can find and kill leftovers.
+  SPACE_INSTANCE: {{ printf "%s-%s" .Release.Namespace .Release.Name | quote }}
+  SANDBOX_INTERNET: {{ .Values.space.sandboxInternet | quote }}
+  # --- Observability ---
+  LANGFUSE_HOST: {{ .Values.agent.langfuseHost | quote }}
+  LANGFUSE_ENABLE_SENSITIVE_DATA: {{ .Values.agent.langfuseEnableSensitiveData | quote }}
+  # --- Runtime ---
+  HOME: "/tmp"
+  NO_PROXY: {{ $noProxy | quote }}
+  no_proxy: {{ $noProxy | quote }}

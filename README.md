@@ -112,6 +112,7 @@ The platform provides the endpoints blueprints consume:
 | LiteLLM (Inference Toolkit) | `OPENAI_BASE_URL` + `OPENAI_API_KEY` | all blueprints |
 | Redis (`redis_stack_enabled`) | `REDIS_URL` | conversational memory |
 | Agent Sandbox (`agent_sandbox_enabled`) | `SANDBOX_ROUTER_URL` | code-execution blueprints |
+| SPACE (`space_enabled`, `space_e2b_enabled`) | `E2B_API_KEY` + `E2B_DOMAIN` | space-coding-agent (microVM sandboxes) |
 | KubeRay (`kuberay_enabled`, optional) | `RAY_ADDRESS` | distributed parallel execution |
 | Langfuse (Inference Toolkit) | `LANGFUSE_*` | tracing (optional) |
 | Envoy Gateway (`eg-gateway`) | `CLUSTER_URL` (= `base_domain_name`) | external access via HTTPRoute |
@@ -145,6 +146,7 @@ in-cluster service URLs.
 | [coding-agent](usecases/coding-agent/) | Intel® Agent Toolkit | AI coding assistant (LangGraph) that writes and runs Python in Agent Sandbox pods; API-only (OpenAI-compatible `/v1/chat/completions` + `/v1/responses`, bearer token), host `coding-agent-langgraph.<base>` | 8090 (API) | [README](usecases/coding-agent/README.md) |
 | [customer-support-agent](usecases/customer-support-agent/) | Intel® Agent Toolkit | E-commerce support agent with 40 tools over a SQLite demo DB, RediSearch long-term memory (`bge-base-en` embeddings) and parallel tool execution; **no user auth**, host `customer-support-agent.<base>` | 8501 (Streamlit UI), 8502 (API) | [README](usecases/customer-support-agent/README.md) |
 | [deep-research-agent](usecases/deep-research-agent/) | Intel® Agent Toolkit | Autonomous web-research agent (LangGraph) that searches the web (Tavily key required), scores sources and writes a cited report, streamed over SSE; host `deep-research-agent.<base>` (+ optional `-dashboard`) | 8081 (UI + API), 8082 (dashboard) | [README](usecases/deep-research-agent/README.md) |
+| [space-coding-agent](usecases/space-coding-agent/) | Intel® Agent Toolkit | Coding agent (Microsoft Agent Framework) that runs code in SPACE Firecracker microVMs through the E2B API: a sandbox per chat plus parallel fan-out across fresh microVMs, with a live UI (chat, tool-call timeline, Sandbox Board); host `space-coding-agent.<base>` | 8090 (UI + API) | [README](usecases/space-coding-agent/README.md) |
 
 > **Categories** group blueprints by the primary capability they demonstrate
 > (e.g. `Intel® Agent Toolkit`, `Intel® Inference Toolkit`, `RAG`). Adding a use case? Pick or propose
